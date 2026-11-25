@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Traço · reconhecimento de escrita cursiva</title>
+  <meta name="description" content="Escreva uma palavra em letra cursiva e veja uma rede neural (CRNN + CTC) separar as letras e reconhecer a palavra, direto no navegador.">
+  <meta name="theme-color" content="#f6f8fc">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400..800;1,400..600&family=Playwrite+BR:wght@200..400&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip" href="#pad">Pular para a área de escrita</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <h1 class="logo">Traço</h1>
+      <p class="tagline">Escreva uma palavra. A rede lê letra por letra.</p>
+    </div>
+    <div class="mode" role="radiogroup" aria-label="Tipo de escrita">
+      <button type="button" role="radio" aria-checked="true" data-mode="cursive" class="mode-btn">Cursiva</button>
+      <button type="button" role="radio" aria-checked="false" data-mode="print" class="mode-btn" tabindex="-1">Letra de forma</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="writing" aria-labelledby="writing-title">
+      <h2 id="writing-title" class="visually-hidden">Área de escrita</h2>
+      <p class="hint" id="hint">Escreva <strong>uma palavra em letras minúsculas</strong>, emendando as letras, entre as linhas azuis.</p>
+
+      <div class="page" id="page">
+        <canvas class="layer guides" id="guides" aria-hidden="true"></canvas>
+        <canvas class="layer ink" id="pad" tabindex="0" role="img"
+                aria-label="Área de escrita. Desenhe com mouse, dedo ou caneta. Enter reconhece, Ctrl+Z desfaz, Esc limpa."></canvas>
+        <svg class="layer marks" id="marks" aria-hidden="true"></svg>
+        <p class="placeholder" id="placeholder" aria-hidden="true">escreva aqui</p>
+      </div>
+
+      <div class="toolbar">
+        <div class="tools-left">
+          <button type="button" class="btn ghost" id="undo" disabled>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+            Desfazer
+          </button>
+          <button type="button" class="btn ghost" id="clear" disabled>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
+            Limpar
+          </button>
+        </div>
+        <button type="button" class="btn primary" id="recognize" disabled>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19c3-1 4-7 6-7s1 5 3 5 3-6 5-6 2 3 2 3"/><path d="m15 4 2 2 4-4"/></svg>
+          Reconhecer
+          <kbd>Enter</kbd>
+        </button>
+      </div>
+      <p class="status" id="status" role="status" aria-live="polite">Carregando modelos…</p>
+    </section>
+
+    <section class="reading" aria-labelledby="result-title">
+      <h2 id="result-title" class="section-title">Palavra reconhecida</h2>
+      <div class="word-wrap">
+        <output class="word is-empty" id="word" for="pad">—</output>
+        <p class="word-note" id="word-note">O resultado aparece aqui depois de você escrever e tocar em Reconhecer.</p>
+      </div>
+
+      <h3 class="section-title small">Letra por letra</h3>
+      <ol class="letters" id="letters" aria-label="Letras segmentadas e probabilidades"></ol>
+
+      <div class="options" id="options">
+        <label class="switch">
+          <input type="checkbox" id="use-lexicon" checked>
+          <span class="switch-track" aria-hidden="true"></span>
+          <span>Corrigir com dicionário <span class="muted">(português e inglês)</span></span>
+        </label>
+        <div class="alts" id="alts" hidden>
+          <span class="muted">Outras leituras:</span>
+          <span id="alts-list"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="pipeline" aria-labelledby="pipeline-title">
+      <div class="pipeline-head">
+        <h2 id="pipeline-title" class="section-title">Como o Traço leu</h2>
+        <p class="muted" id="pipeline-desc">Cada etapa na mesma escala: o traço é normalizado, binarizado com Otsu e entregue à rede neural.</p>
+      </div>
+      <ol class="stages" id="stages">
+        <li class="stage"><canvas id="st-render"></canvas><span class="stage-label"><b>1.</b> Traço normalizado</span></li>
+        <li class="stage"><canvas id="st-binary"></canvas><span class="stage-label"><b>2.</b> Otsu + contornos (OpenCV)</span></li>
+        <li class="stage"><canvas id="st-input"></canvas><span class="stage-label" id="st-input-label"><b>3.</b> Entrada da rede 32×256</span></li>
+        <li class="stage"><canvas id="st-output"></canvas><span class="stage-label" id="st-output-label"><b>4.</b> Probabilidades por quadro (CTC)</span></li>
+      </ol>
+    </section>
+
+    <section class="collect" id="collect" hidden aria-labelledby="collect-title">
+      <h2 id="collect-title" class="section-title">Coletar amostras reais</h2>
+      <p>Escreva a palavra abaixo em cursiva, emendando as letras, e toque em <b>Salvar e próxima</b> (atalho: <kbd>S</kbd>).</p>
+      <p class="collect-target">Escreva: <span id="collect-word" class="model-word">casa</span></p>
+      <div class="collect-actions">
+        <button type="button" class="btn primary" id="collect-save" disabled>Salvar e próxima</button>
+        <button type="button" class="btn ghost" id="collect-skip">Pular palavra</button>
+        <button type="button" class="btn ghost" id="collect-export" disabled>Baixar amostras (.json)</button>
+        <span class="muted" id="collect-count">0 amostras salvas</span>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>
+      Desafio Final · Bootcamp Arquiteto(a) de Deep Learning (XP Educação).
+      Cursiva: CRNN + CTC treinada com palavras sintéticas. Letra de forma: CNN treinada no EMNIST Balanced.
+      Tudo roda no seu navegador (onnxruntime-web + OpenCV.js).
+    </p>
+    <p>
+      <a href="https://huggingface.co/spaces/SEU_USUARIO/traco/blob/main/notebook/desafio_final.ipynb" id="nb-link">Notebook do treino</a> ·
+      <a href="?coletar=1" id="collect-link">Coletar amostras</a>
+    </p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
+  <script>
+    // Módulos ES e fetch() não funcionam abrindo o arquivo direto (file://): avisa em vez de ficar travado.
+    if (location.protocol === "file:") {
+      var st = document.getElementById("status");
+      st.className = "status error";
+      st.textContent = "Abra pelo servidor local: na pasta space, rode \"python -m http.server 8000\" e acesse http://localhost:8000";
+    }
+  </script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+ "emnist_classes": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabdefghnqrt",
+ "cursive_alphabet": "abcdefghijklmnopqrstuvwxyz",
+ "ctc_blank": 0,
+ "crnn_input": [
+  1,
+  1,
+  32,
+  256
+ ],
+ "crnn_frames": 64
+}
