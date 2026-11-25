@@ -5,8 +5,8 @@ __pycache__/
 *$py.class
 .pytest_cache/
 
-# Datasets & raw downloads (large files)
-data/
+# Datasets & raw downloads (large files at root)
+/data/
 
 # Model checkpoints (exported ONNX models live in space/models/)
 artifacts/*.pt
